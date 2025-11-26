@@ -1,6 +1,8 @@
 import { auth } from '../../../config/firebase';
-import { getFirestore, doc, getDoc } from 'firebase/firestore';
-import { API_BASE_URL, getAuthToken } from '../../../config/api';
+import { getFirestore, doc, getDoc, setDoc } from 'firebase/firestore';
+import { getAuthToken } from '../../../config/api';
+import { uploadImageWithProgress, generateStoragePath } from '../../../services/firebaseStorage.service';
+import { CLOUDINARY_CONFIG, CLOUDINARY_UPLOAD_URL } from '../../../config/cloudinary';
 
 /**
  * Servicio para manejar la información del usuario cliente
@@ -22,14 +24,6 @@ export type UpdateProfileData = {
   apellido: string;
   telefono: string;
   fotoUrl?: string;
-};
-
-export type CloudinarySignature = {
-  signature: string;
-  timestamp: number;
-  cloudName: string;
-  apiKey: string;
-  folder: string;
 };
 
 /**
@@ -84,76 +78,138 @@ export const getCurrentUserInfo = async (): Promise<UserInfo> => {
 };
 
 /**
- * Obtiene la firma de Cloudinary para subir imágenes de perfil
+ * Sube una imagen a Firebase Storage usando la API REST
+ * @param imageUri - URI local de la imagen
+ * @param folder - Carpeta en Storage (ej: 'perfiles', 'canchas')
+ * @param onProgress - Callback opcional para el progreso de subida
+ * @returns URL pública de descarga
  */
-export const getUserProfileSignature = async (): Promise<CloudinarySignature> => {
+export const uploadImageToFirebase = async (
+  imageUri: string,
+  folder: string = 'perfiles',
+  onProgress?: (progress: number) => void
+): Promise<string> => {
   try {
-    const token = await getAuthToken();
-    if (!token) {
-      throw new Error('No hay usuario autenticado');
-    }
-
-    const response = await fetch(`${API_BASE_URL}/users/upload-signature`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-    });
-
-    if (!response.ok) {
-      const errorData = await response.text();
-      throw new Error(`Error obteniendo firma: ${errorData}`);
-    }
-
-    const data = await response.json();
-    console.log('✅ Firma de Cloudinary obtenida');
-    return data;
+    console.log('📤 Subiendo imagen a Firebase Storage...');
+    
+    // Generar path único
+    const storagePath = generateStoragePath(folder);
+    
+    // Usar el nuevo servicio que usa la API REST
+    const downloadUrl = await uploadImageWithProgress(imageUri, storagePath, onProgress);
+    
+    console.log('✅ Imagen subida a Firebase Storage:', downloadUrl);
+    return downloadUrl;
   } catch (error) {
-    console.error('🔴 Error en getUserProfileSignature:', error);
+    console.error('🔴 Error en uploadImageToFirebase:', error);
     throw error;
   }
 };
 
 /**
- * Sube una imagen a Cloudinary usando la firma del backend
+ * Actualiza el perfil del usuario directamente en Firestore
+ */
+export const updateUserProfile = async (data: UpdateProfileData): Promise<UserInfo> => {
+  try {
+    const user = auth.currentUser;
+    if (!user) {
+      throw new Error('No hay usuario autenticado');
+    }
+
+    console.log('📤 Actualizando perfil en Firestore:', data);
+
+    const db = getFirestore();
+    const userDocRef = doc(db, 'users', user.uid);
+    
+    // Preparar datos para actualizar
+    const updateData = {
+      nombre: data.nombre,
+      apellido: data.apellido,
+      telefono: data.telefono,
+      ...(data.fotoUrl && { fotoUrl: data.fotoUrl }),
+      updatedAt: new Date(),
+    };
+
+    // Actualizar en Firestore (merge: true para no sobrescribir otros campos)
+    await setDoc(userDocRef, updateData, { merge: true });
+
+    // Obtener datos actualizados
+    const updatedDoc = await getDoc(userDocRef);
+    const updatedData = updatedDoc.data();
+
+    const updatedUser: UserInfo = {
+      uid: user.uid,
+      email: user.email || '',
+      nombre: updatedData?.nombre || data.nombre,
+      apellido: updatedData?.apellido || data.apellido,
+      telefono: updatedData?.telefono || data.telefono,
+      fotoUrl: updatedData?.fotoUrl || data.fotoUrl,
+      updatedAt: new Date(),
+    };
+
+    console.log('✅ Perfil actualizado en Firestore:', updatedUser);
+    return updatedUser;
+  } catch (error) {
+    console.error('🔴 Error en updateUserProfile:', error);
+    throw error;
+  }
+};
+
+/**
+ * Tipo para la firma de Cloudinary
+ */
+export type CloudinarySignature = {
+  signature: string;
+  timestamp: number;
+  api_key: string;
+};
+
+/**
+ * Obtiene la firma de Cloudinary para subir imágenes de perfil
+ * Usa unsigned upload preset para simplificar
+ */
+export const getUserProfileSignature = async (): Promise<CloudinarySignature> => {
+  // Para unsigned uploads, no necesitamos firma real
+  // Retornamos datos dummy que serán ignorados
+  return {
+    signature: '',
+    timestamp: Date.now(),
+    api_key: CLOUDINARY_CONFIG.apiKey,
+  };
+};
+
+/**
+ * Sube una imagen a Cloudinary usando unsigned upload
+ * @param imageUri - URI local de la imagen
+ * @param _signature - Firma (ignorada para unsigned uploads)
+ * @returns URL pública de la imagen
  */
 export const uploadImageToCloudinary = async (
   imageUri: string,
-  signature: CloudinarySignature
+  _signature?: CloudinarySignature
 ): Promise<string> => {
   try {
+    console.log('📤 Subiendo imagen a Cloudinary...');
+
+    // Crear FormData para upload sin firma (unsigned upload)
     const formData = new FormData();
-    
-    // Preparar el archivo de imagen
-    const filename = imageUri.split('/').pop() || 'profile.jpg';
-    const match = /\.(\w+)$/.exec(filename);
-    const type = match ? `image/${match[1]}` : 'image/jpeg';
-    
     formData.append('file', {
       uri: imageUri,
-      name: filename,
-      type,
+      type: 'image/jpeg',
+      name: `perfil_${Date.now()}.jpg`,
     } as any);
-    
-    formData.append('signature', signature.signature);
-    formData.append('timestamp', signature.timestamp.toString());
-    formData.append('api_key', signature.apiKey);
-    formData.append('folder', signature.folder);
+    formData.append('upload_preset', CLOUDINARY_CONFIG.uploadPreset);
 
-    const cloudinaryUrl = `https://api.cloudinary.com/v1_1/${signature.cloudName}/image/upload`;
-    
-    const response = await fetch(cloudinaryUrl, {
+    // Subir a Cloudinary usando unsigned upload preset
+    const response = await fetch(CLOUDINARY_UPLOAD_URL, {
       method: 'POST',
       body: formData,
-      headers: {
-        'Accept': 'application/json',
-      },
     });
 
     if (!response.ok) {
-      const errorData = await response.text();
-      throw new Error(`Error subiendo imagen: ${errorData}`);
+      const errorData = await response.json();
+      console.error('❌ Error de Cloudinary:', errorData);
+      throw new Error(errorData.error?.message || 'Error al subir imagen a Cloudinary');
     }
 
     const data = await response.json();
@@ -161,41 +217,6 @@ export const uploadImageToCloudinary = async (
     return data.secure_url;
   } catch (error) {
     console.error('🔴 Error en uploadImageToCloudinary:', error);
-    throw error;
-  }
-};
-
-/**
- * Actualiza el perfil del usuario en el backend
- */
-export const updateUserProfile = async (data: UpdateProfileData): Promise<UserInfo> => {
-  try {
-    const token = await getAuthToken();
-    if (!token) {
-      throw new Error('No hay usuario autenticado');
-    }
-
-    console.log('📤 Actualizando perfil:', data);
-
-    const response = await fetch(`${API_BASE_URL}/users/profile`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-      body: JSON.stringify(data),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.text();
-      throw new Error(`Error actualizando perfil: ${errorData}`);
-    }
-
-    const updatedUser = await response.json();
-    console.log('✅ Perfil actualizado:', updatedUser);
-    return updatedUser;
-  } catch (error) {
-    console.error('🔴 Error en updateUserProfile:', error);
     throw error;
   }
 };

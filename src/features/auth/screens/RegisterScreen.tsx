@@ -13,7 +13,7 @@ import { Button, Input, Loading } from '../../../components/common';
 import { colors } from '../../../styles/colors';
 import { spacing, fontSize, fontWeight } from '../../../styles/spacing';
 import { validators, errorMessages } from '../../../utils/validators';
-import { registerUser } from '../services/authentication.service';
+import { registerUser, loginUser } from '../services/authentication.service';
 
 export const RegisterScreen = ({ navigation }: any) => {
   const [loading, setLoading] = useState(false);
@@ -112,7 +112,7 @@ export const RegisterScreen = ({ navigation }: any) => {
     if (!validateForm()) return;
 
     setLoading(true);
-    
+
     try {
       // 1. Recolectar los datos de los inputs
       const userData = {
@@ -128,9 +128,21 @@ export const RegisterScreen = ({ navigation }: any) => {
 
       // 3. Manejar la respuesta
       if (result.success) {
-        Alert.alert("¡Éxito!", "Te has registrado correctamente. Ahora puedes iniciar sesión.");
-        // Navegar a la pantalla de Login
-        navigation.navigate('Login');
+        try {
+          const loginResult = await loginUser({
+            email: userData.email,
+            password: userData.password,
+          });
+
+          if (loginResult.success) {
+            Alert.alert('¡Bienvenido!', 'Tu cuenta se creó y has iniciado sesión correctamente.');
+            // No navegamos manualmente: AppNavigator cambiará automáticamente a la app
+          } else {
+            Alert.alert('Cuenta creada', 'Tu cuenta se creó, pero hubo un problema al iniciar sesión automáticamente. Intentá iniciar sesión manualmente.');
+          }
+        } catch (loginError: any) {
+          Alert.alert('Cuenta creada', loginError.message || 'Tu cuenta se creó, pero hubo un problema al iniciar sesión automáticamente. Intentá iniciar sesión manualmente.');
+        }
       } else {
         // Mostrar el mensaje de error que viene del backend
         Alert.alert("Error de Registro", result.message);

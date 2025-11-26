@@ -995,9 +995,9 @@ const AdminReservasScreen = () => {
                                 isAvailable && styles.slotStatusAvailable
                               ]}
                             >
-                              {isBooked && '🔴 Reservado'}
-                              {isBlocked && '🔒 Bloqueado'}
-                              {isAvailable && '✅ Libre'}
+                              {isBooked && 'Reservado'}
+                              {isBlocked && 'Bloqueado'}
+                              {isAvailable && 'Libre'}
                             </Text>
                           </TouchableOpacity>
                         );

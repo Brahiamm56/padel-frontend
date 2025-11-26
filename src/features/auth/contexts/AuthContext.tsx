@@ -88,12 +88,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       setToken(data.token);
       setLoading(false);
       
-      // Registrar push token en el backend
-      setTimeout(() => {
-        registerPushToken().catch(() => {
-          // Error manejado silenciosamente en el servicio
-        });
-      }, 1000);
+      // Registro de push token desactivado temporalmente
     });
 
     const logoutListener = DeviceEventEmitter.addListener('userLoggedOut', () => {
@@ -126,9 +121,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         const savedUser = JSON.parse(savedUserJson);
         console.log('🔵 Usuario cargado desde storage:', savedUser);
         
-        // ✅ Establecer token en memoria inmediatamente
-        setAuthToken(savedToken);
-        
         // Convertir al formato del AuthContext
         const user: User = {
           uid: savedUser.id || savedUser.uid, // Usar el ID del backend
@@ -144,12 +136,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         setToken(savedToken);
         console.log('✅ Usuario cargado exitosamente en AuthContext');
         
-        // Registrar push token si ya hay sesión
-        setTimeout(() => {
-          registerPushToken().catch(() => {
-            // Error manejado silenciosamente en el servicio
-          });
-        }, 1000);
+        // Registro de push token desactivado temporalmente
       } else {
         console.log('🔵 No hay usuario guardado');
         setUser(null);
@@ -184,9 +171,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
           updatedAt: userData.updatedAt?.toDate() || new Date(),
         };
 
-        // ✅ Establecer token en memoria ANTES de guardar en AsyncStorage
-        setAuthToken(idToken);
-        
         // Guardar en estado y AsyncStorage
         setUser(user);
         setToken(idToken);
@@ -254,9 +238,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   // Logout
   const logout = async () => {
     try {
-      // Desregistrar push token
-      await unregisterPushToken();
-      
+      // Desregistro de push token desactivado temporalmente
       // ✅ Limpiar token de memoria
       clearAuthToken();
       
