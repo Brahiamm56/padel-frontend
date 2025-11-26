@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import { useNavigation } from '@react-navigation/native';
 import { getSavedUser, logout as authLogout, type Usuario } from '../../auth/services/authentication.service';
 import { getClubInfo, type ClubInfo } from '../../canchas/services/club.service';
 import { updateClubLogo } from '../../canchas/services/club.service';
@@ -75,6 +76,7 @@ const MenuGroup = ({ title, children }: { title: string; children: React.ReactNo
 };
 
 const AdminPerfilScreen = () => {
+  const navigation = useNavigation();
   const { theme, isDarkMode, toggleTheme } = useTheme();
   const [user, setUser] = useState<Usuario | null>(null);
   const [clubInfo, setClubInfo] = useState<ClubInfo | null>(null);
@@ -207,6 +209,7 @@ const AdminPerfilScreen = () => {
 
   const handleNotifications = () => {
     console.log('Navegando a notificaciones...');
+    navigation.navigate('Notifications');
   };
 
   const handleAppearance = () => {

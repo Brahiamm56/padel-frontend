@@ -1,5 +1,4 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_BASE_URL, TOKEN_KEY } from '../../../config/api';
+import { API_BASE_URL, getAuthToken } from '../../../config/api';
 
 const API_URL = API_BASE_URL;
 
@@ -30,12 +29,46 @@ export interface ReservaAdmin {
   estado: string;
 }
 
+export interface PerfilComplejo {
+  id: string;
+  nombre: string;
+  direccion?: string;
+  telefono?: string;
+}
+
+/**
+ * Obtiene el perfil del complejo del admin autenticado
+ */
+export const getPerfilComplejo = async (): Promise<PerfilComplejo | null> => {
+  try {
+    const token = await getAuthToken();
+    const response = await fetch(`${API_URL}/admin/perfil-complejo`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ Error obteniendo perfil del complejo:', errorText);
+      return null;
+    }
+
+    const data = await response.json();
+    console.log('✅ Perfil del complejo:', data);
+    return data;
+  } catch (error) {
+    console.error('💥 Error en getPerfilComplejo:', error);
+    return null;
+  }
+};
+
 /**
  * Obtiene las canchas del admin autenticado
  */
 export const getMisCanchasAdmin = async (): Promise<CanchaAdmin[]> => {
   try {
-    const token = await AsyncStorage.getItem(TOKEN_KEY);
+    const token = await getAuthToken();
     console.log('🔑 Token:', token ? 'Presente' : 'NO EXISTE');
     console.log('🌐 URL:', `${API_URL}/admin/canchas`);
     
@@ -67,7 +100,7 @@ export const getMisCanchasAdmin = async (): Promise<CanchaAdmin[]> => {
  */
 export const crearCanchaAdmin = async (canchaData: Omit<CanchaAdmin, 'id'>): Promise<CanchaAdmin | null> => {
   try {
-    const token = await AsyncStorage.getItem(TOKEN_KEY);
+    const token = await getAuthToken();
     const response = await fetch(`${API_URL}/admin/canchas`, {
       method: 'POST',
       headers: {
@@ -95,7 +128,7 @@ export const crearCanchaAdmin = async (canchaData: Omit<CanchaAdmin, 'id'>): Pro
  */
 export const updateCanchaAdmin = async (canchaId: string, canchaData: Partial<CanchaAdmin>): Promise<CanchaAdmin | null> => {
   try {
-    const token = await AsyncStorage.getItem(TOKEN_KEY);
+    const token = await getAuthToken();
     const response = await fetch(`${API_URL}/admin/canchas/${canchaId}`, {
       method: 'PUT',
       headers: {
@@ -123,7 +156,7 @@ export const updateCanchaAdmin = async (canchaId: string, canchaData: Partial<Ca
  */
 export const deleteCanchaAdmin = async (canchaId: string): Promise<void> => {
   try {
-    const token = await AsyncStorage.getItem(TOKEN_KEY);
+    const token = await getAuthToken();
     
     const response = await fetch(`${API_URL}/admin/canchas/${canchaId}`, {
       method: 'DELETE',
@@ -148,7 +181,7 @@ export const deleteCanchaAdmin = async (canchaId: string): Promise<void> => {
  */
 export const toggleCanchaStatus = async (canchaId: string): Promise<boolean> => {
   try {
-    const token = await AsyncStorage.getItem(TOKEN_KEY);
+    const token = await getAuthToken();
     const response = await fetch(`${API_URL}/admin/canchas/${canchaId}/toggle`, {
       method: 'PUT',
       headers: {
@@ -173,21 +206,29 @@ export const toggleCanchaStatus = async (canchaId: string): Promise<boolean> => 
  */
 export const getAdminReservas = async (): Promise<ReservaAdmin[]> => {
   try {
-    const token = await AsyncStorage.getItem(TOKEN_KEY);
+    const token = await getAuthToken();
+    console.log('🔍 [Reservas] Token:', token ? 'Presente' : 'NO EXISTE');
+    console.log('🌐 [Reservas] URL:', `${API_URL}/admin/reservas`);
+    
     const response = await fetch(`${API_URL}/admin/reservas`, {
       headers: {
         'Authorization': `Bearer ${token}`,
       },
     });
 
+    console.log('📡 [Reservas] Status:', response.status);
+    
     if (!response.ok) {
-      throw new Error('Error al obtener reservas del admin');
+      const errorText = await response.text();
+      console.error('❌ [Reservas] Error del servidor:', errorText);
+      throw new Error(`Error ${response.status}: ${errorText}`);
     }
 
     const data = await response.json();
+    console.log('✅ [Reservas] Datos recibidos:', data.length, 'reservas');
     return data;
   } catch (error) {
-    console.error('Error en getAdminReservas:', error);
+    console.error('💥 Error en getAdminReservas:', error);
     return [];
   }
 };
@@ -197,7 +238,7 @@ export const getAdminReservas = async (): Promise<ReservaAdmin[]> => {
  */
 export const confirmarReservaAdmin = async (reservaId: string): Promise<boolean> => {
   try {
-    const token = await AsyncStorage.getItem(TOKEN_KEY);
+    const token = await getAuthToken();
     const response = await fetch(`${API_URL}/admin/reservas/${reservaId}/confirmar`, {
       method: 'PUT',
       headers: {
@@ -222,7 +263,7 @@ export const confirmarReservaAdmin = async (reservaId: string): Promise<boolean>
  */
 export const cancelarReservaAdmin = async (reservaId: string): Promise<boolean> => {
   try {
-    const token = await AsyncStorage.getItem(TOKEN_KEY);
+    const token = await getAuthToken();
     const response = await fetch(`${API_URL}/admin/reservas/${reservaId}/cancelar`, {
       method: 'PUT',
       headers: {
@@ -250,7 +291,7 @@ export const getCanchaDisponibilidad = async (
   fecha: string
 ): Promise<{ horariosReservados: string[]; horariosBloqueados: string[] }> => {
   try {
-    const token = await AsyncStorage.getItem(TOKEN_KEY);
+    const token = await getAuthToken();
     const response = await fetch(
       `${API_URL}/admin/canchas/${canchaId}/disponibilidad?fecha=${fecha}`,
       {
@@ -281,7 +322,7 @@ export const getCanchaDisponibilidad = async (
  */
 export const bloquearHorarioAdmin = async (canchaId: string, fecha: string, hora: string): Promise<boolean> => {
   try {
-    const token = await AsyncStorage.getItem(TOKEN_KEY);
+    const token = await getAuthToken();
     const response = await fetch(`${API_URL}/admin/canchas/${canchaId}/bloquear`, {
       method: 'POST',
       headers: {
@@ -308,7 +349,7 @@ export const bloquearHorarioAdmin = async (canchaId: string, fecha: string, hora
  */
 export const desbloquearHorarioAdmin = async (canchaId: string, fecha: string, hora: string): Promise<boolean> => {
   try {
-    const token = await AsyncStorage.getItem(TOKEN_KEY);
+    const token = await getAuthToken();
     const response = await fetch(`${API_URL}/admin/canchas/${canchaId}/desbloquear`, {
       method: 'POST',
       headers: {

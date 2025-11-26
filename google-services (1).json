@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "91155734343",
+    "project_id": "northpadel-5a21e",
+    "storage_bucket": "northpadel-5a21e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:91155734343:android:a4bbcbf6bce71154cbf662",
+        "android_client_info": {
+          "package_name": "com.northpadel.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "91155734343-ees4tlh5b7j764e8ffrnkebp84n87aht.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDKGWZ4JrG0vToO5YxsEIaRe7MEEnIE_04"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "91155734343-ees4tlh5b7j764e8ffrnkebp84n87aht.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

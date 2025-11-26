@@ -11,8 +11,15 @@ import {
   ActivityIndicator,
   Alert,
   Linking,
+  SafeAreaView,
+  LayoutAnimation,
+  Platform,
+  UIManager,
 } from 'react-native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { EmptyState } from '../../../components/common/EmptyState';
+import { LoadingScreen } from '../../../components/common/LoadingSkeleton';
+import { toggleFavorito, isFavorito } from '../../../services/favorites.service';
 import { getComplejosConCanchas, type Complejo, type Cancha } from '../../canchas/services/courts.service';
 import { colors } from '../../../styles/colors';
 import { spacing, fontSize, borderRadius } from '../../../styles/spacing';
@@ -26,11 +33,17 @@ type Props = NativeStackScreenProps<CanchasStackParamList, 'CanchasHome'>;
  * Pantalla de Canchas - Vista del Cliente
  * Aquí el usuario podrá ver las canchas disponibles y hacer reservas
  */
+// Habilitar animaciones de layout en Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
 const CanchasScreen = ({ navigation }: Props) => {
   const { theme } = useTheme();
   const [complejos, setComplejos] = useState<Complejo[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [favoritos, setFavoritos] = useState<Set<string>>(new Set());
 
   // Cargar complejos con canchas al montar el componente
   useEffect(() => {
@@ -60,7 +73,35 @@ const CanchasScreen = ({ navigation }: Props) => {
   // Manejar notificaciones
   const handleNotifications = () => {
     console.log('Abriendo notificaciones...');
-    // TODO: Navegar a pantalla de notificaciones
+    navigation.navigate('Notifications');
+  };
+
+  // Manejar favoritos con animación
+  const handleToggleFavorito = async (cancha: Cancha, complejo: Complejo) => {
+    const favKey = `${complejo.id}-${cancha.id}`;
+    
+    // Animar el cambio
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    
+    const esFavorito = await toggleFavorito({
+      canchaId: cancha.id,
+      complejoId: complejo.id,
+      canchaNombre: cancha.nombre,
+      complejoNombre: complejo.nombre,
+      precioHora: cancha.precioHora,
+      imagenUrl: cancha.imagenUrl,
+      addedAt: new Date().toISOString(),
+    });
+    
+    setFavoritos(prev => {
+      const newSet = new Set(prev);
+      if (esFavorito) {
+        newSet.add(favKey);
+      } else {
+        newSet.delete(favKey);
+      }
+      return newSet;
+    });
   };
 
   // Manejar selección de cancha
@@ -119,24 +160,56 @@ const CanchasScreen = ({ navigation }: Props) => {
     if (item.blindex) caracteristicas.push('Blindex');
     if (item.cesped) caracteristicas.push('Césped Sintético');
     
+    const favKey = `${complejo.id}-${item.id}`;
+    const isFav = favoritos.has(favKey);
+    
+    // Determinar si mostrar badge (Popular o Nuevo)
+    const showPopularBadge = (item.horariosDisponibles || 0) < 2;
+    
     return (
       <TouchableOpacity
         style={[styles.canchaCardHorizontal, { backgroundColor: theme.colors.surface }]}
         onPress={() => handleCanchaPress(item, complejo)}
         activeOpacity={0.95}
       >
-        {/* Imagen de la cancha */}
-        {item.imagenUrl ? (
-          <Image
-            source={{ uri: item.imagenUrl }}
-            style={styles.canchaImageHorizontal}
-            resizeMode="cover"
-          />
-        ) : (
-          <View style={[styles.canchaImageHorizontal, { backgroundColor: '#F5F5F5', justifyContent: 'center', alignItems: 'center' }]}>
-            <Ionicons name="tennisball-outline" size={40} color="#CCCCCC" />
-          </View>
-        )}
+        {/* Imagen de la cancha con badges */}
+        <View style={styles.imageWrapper}>
+          {item.imagenUrl ? (
+            <Image
+              source={{ uri: item.imagenUrl }}
+              style={styles.canchaImageHorizontal}
+              resizeMode="cover"
+            />
+          ) : (
+            <View style={[styles.canchaImageHorizontal, { backgroundColor: '#F5F5F5', justifyContent: 'center', alignItems: 'center' }]}>
+              <Ionicons name="tennisball-outline" size={40} color="#CCCCCC" />
+            </View>
+          )}
+          
+          {/* Badge Popular/Nuevo */}
+          {showPopularBadge && (
+            <View style={styles.popularBadge}>
+              <Ionicons name="flame" size={12} color="#FFF" />
+              <Text style={styles.popularBadgeText}>Popular</Text>
+            </View>
+          )}
+          
+          {/* Bot\u00f3n de favorito */}
+          <TouchableOpacity
+            style={[styles.favoriteButton, isFav && styles.favoriteButtonActive]}
+            onPress={(e) => {
+              e.stopPropagation();
+              handleToggleFavorito(item, complejo);
+            }}
+            activeOpacity={0.8}
+          >
+            <Ionicons 
+              name={isFav ? "heart" : "heart-outline"} 
+              size={20} 
+              color={isFav ? "#FF4444" : "#FFF"} 
+            />
+          </TouchableOpacity>
+        </View>
         
         {/* Información de la cancha */}
         <View style={styles.canchaInfoContainer}>
@@ -215,12 +288,43 @@ const CanchasScreen = ({ navigation }: Props) => {
     });
   }, [complejos, searchQuery]);
 
-  // Mostrar indicador de carga
+  // Mostrar skeleton mientras carga
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loadingText}>Cargando canchas...</Text>
+      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <View style={styles.header}>
+          <View style={styles.searchContainer}>
+            <Text style={styles.loadingText}>Cargando canchas...</Text>
+          </View>
+        </View>
+        <LoadingScreen count={4} />
+      </View>
+    );
+  }
+
+  // Mostrar empty state si no hay complejos o si la búsqueda no tiene resultados
+  if (complejos.length === 0 || complejosFiltrados.length === 0) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <View style={styles.header}>
+          <SafeAreaView style={styles.searchContainer}>
+            <Ionicons name="search" size={20} color={colors.gray500} style={styles.searchIcon} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Buscar canchas o complejos..."
+              placeholderTextColor={colors.gray400}
+              value={searchQuery}
+              onChangeText={handleSearch}
+            />
+          </SafeAreaView>
+        </View>
+        <EmptyState
+          icon="tennisball-outline"
+          title={searchQuery ? "No se encontraron canchas" : "No hay canchas disponibles"}
+          message={searchQuery ? `No hay resultados para "${searchQuery}"` : "¡Empieza a explorar las canchas disponibles!"}
+          actionLabel={searchQuery ? "Limpiar búsqueda" : undefined}
+          onActionPress={searchQuery ? () => setSearchQuery('') : undefined}
+        />
       </View>
     );
   }
@@ -282,7 +386,7 @@ const CanchasScreen = ({ navigation }: Props) => {
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       {/* Barra superior con buscador y notificaciones */}
       <View style={styles.header}>
-        <View style={styles.searchContainer}>
+        <SafeAreaView style={styles.searchContainer}>
           <Ionicons name="search" size={20} color={colors.gray500} style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
@@ -291,7 +395,7 @@ const CanchasScreen = ({ navigation }: Props) => {
             value={searchQuery}
             onChangeText={handleSearch}
           />
-        </View>
+        </SafeAreaView>
         <TouchableOpacity
           style={styles.notificationButton}
           onPress={handleNotifications}
@@ -553,6 +657,42 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#001F5B',
     marginRight: 4,
+  },
+  
+  // Estilos para imagen con badges y botón de favoritos
+  imageWrapper: {
+    position: 'relative',
+  },
+  popularBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    backgroundColor: '#FF6B35',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
+  },
+  popularBadgeText: {
+    color: '#FFF',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  favoriteButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  favoriteButtonActive: {
+    backgroundColor: 'rgba(255, 68, 68, 0.2)',
   },
   
   // Estilos para estados vacíos y errores

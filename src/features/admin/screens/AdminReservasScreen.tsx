@@ -30,7 +30,8 @@ import {
   desbloquearHorarioAdmin,
   ReservaAdmin,
   CanchaAdmin,
-  getMisCanchasAdmin
+  getMisCanchasAdmin,
+  getPerfilComplejo
 } from '../services/admin.service';
 
 // Componente para mostrar el selector de fechas
@@ -369,6 +370,7 @@ const AdminReservasScreen = () => {
   const [viewMode, setViewMode] = useState<'reservas' | 'disponibilidad'>('reservas');
   const [canchas, setCanchas] = useState<CanchaAdmin[]>([]);
   const [reservas, setReservas] = useState<ReservaAdmin[]>([]);
+  const [nombreComplejo, setNombreComplejo] = useState('Mi Complejo');
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedReserva, setSelectedReserva] = useState<ReservaAdmin | null>(null);
   const [estadoMenuVisible, setEstadoMenuVisible] = useState(false);
@@ -380,21 +382,28 @@ const AdminReservasScreen = () => {
   const [blockedSlots, setBlockedSlots] = useState<string[]>([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
 
-  // Cargar canchas al montar el componente
+  // Cargar canchas y perfil del complejo al montar el componente
   useEffect(() => {
-    const cargarCanchas = async () => {
+    const cargarDatosIniciales = async () => {
       try {
+        // Cargar perfil del complejo
+        const perfil = await getPerfilComplejo();
+        if (perfil?.nombre) {
+          setNombreComplejo(perfil.nombre);
+        }
+        
+        // Cargar canchas
         console.log('🔍 Cargando canchas del administrador...');
         const canchasData = await getMisCanchasAdmin();
         console.log('✅ Canchas recibidas:', canchasData);
         console.log('📊 Cantidad de canchas:', canchasData.length);
         setCanchas(canchasData);
       } catch (error) {
-        console.error('❌ Error al cargar las canchas:', error);
+        console.error('❌ Error al cargar datos iniciales:', error);
       }
     };
 
-    cargarCanchas();
+    cargarDatosIniciales();
   }, []);
 
   // Cargar reservas cuando cambia la fecha seleccionada
@@ -638,7 +647,7 @@ const AdminReservasScreen = () => {
       <View style={styles.headerContainer}>
         <View style={styles.headerTop}>
           <View style={styles.headerTitleSection}>
-            <Text style={styles.headerTitle}>Reservas</Text>
+            <Text style={styles.headerTitle}>{nombreComplejo}</Text>
             {reservasFiltradas.length > 0 && (
               <View style={styles.headerBadge}>
                 <Text style={styles.headerBadgeText}>{reservasFiltradas.length}</Text>

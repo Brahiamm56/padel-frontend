@@ -10,6 +10,7 @@ import CanchasScreen from '../features/user/screens/CanchasScreen';
 import CanchaDetalleScreen from '../features/user/screens/CanchaDetalleScreen';
 import MisReservasScreen from '../features/user/screens/MisReservasScreen';
 import PerfilScreen from '../features/user/screens/PerfilScreen';
+import NotificationsScreen from '../features/notifications/screens/NotificationsScreen';
 
 /**
  * Definición de tipos para el Stack Navigator de Canchas
@@ -17,6 +18,7 @@ import PerfilScreen from '../features/user/screens/PerfilScreen';
 export type CanchasStackParamList = {
   CanchasHome: undefined;
   CanchaDetalle: { canchaId: string; complejoId: string };
+  Notifications: undefined;
 };
 
 /**
@@ -62,6 +64,13 @@ const CanchasStackNavigator = () => {
         options={{
           title: 'Detalle de Cancha',
           headerBackTitle: 'Volver',
+        }}
+      />
+      <CanchasStack.Screen
+        name="Notifications"
+        component={NotificationsScreen}
+        options={{
+          headerShown: false,
         }}
       />
     </CanchasStack.Navigator>

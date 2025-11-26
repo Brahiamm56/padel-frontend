@@ -1,12 +1,19 @@
 {
   "expo": {
-    "name": "mobile",
-    "slug": "mobile",
+    "name": "NorthPadel",
+    "slug": "northpadel",
+    "owner": "brahiamm56",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/logo.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
+    "scheme": "northpadel",
+    "extra": {
+      "eas": {
+        "projectId": "your-project-id-here"
+      }
+    },
     "splash": {
       "image": "./assets/images/logo.png",
       "resizeMode": "contain",
@@ -14,6 +21,7 @@
     },
     "ios": {
       "supportsTablet": true,
+      "bundleIdentifier": "com.northpadel.app",
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "La aplicación necesita acceso a tu galería para que puedas subir fotos de las canchas.",
         "NSCameraUsageDescription": "La aplicación necesita acceso a tu cámara para que puedas tomar fotos de las canchas.",
@@ -32,7 +40,8 @@
       ],
       "package": "com.northpadel.app",
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "usesCleartextTraffic": true
     },
     "web": {
       "favicon": "./assets/favicon.png"

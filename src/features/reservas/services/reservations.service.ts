@@ -1,6 +1,4 @@
-// Reemplaza 'TU_DIRECCION_IP' con la IP de tu computadora        
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_BASE_URL, TOKEN_KEY } from '../../../config/api';
+import { API_BASE_URL, getAuthToken } from '../../../config/api';
 
 const API_URL = API_BASE_URL;export interface ReservaPayload {
   complejoId: string;
@@ -15,7 +13,8 @@ const API_URL = API_BASE_URL;export interface ReservaPayload {
  */
 export const crearReserva = async (reservaData: ReservaPayload) => {
   try {
-    const token = await AsyncStorage.getItem(TOKEN_KEY);
+    const token = await getAuthToken();
+    console.log('🔑 Token obtenido para reserva:', token ? `${token.substring(0, 20)}...` : 'NULL');
     const response = await fetch(`${API_URL}/reservas`, {
       method: 'POST',
       headers: {
@@ -47,7 +46,7 @@ export const crearReserva = async (reservaData: ReservaPayload) => {
  */
 export const getMisReservas = async (tipo: 'proximas' | 'anteriores') => {
   try {
-    const token = await AsyncStorage.getItem(TOKEN_KEY);
+    const token = await getAuthToken();
     // Por ahora, obtenemos todas las reservas. Más adelante, el backend
     // podrá filtrar por tipo: /api/reservas?tipo=proximas
     const response = await fetch(`${API_URL}/reservas`, {
@@ -76,7 +75,7 @@ export const getMisReservas = async (tipo: 'proximas' | 'anteriores') => {
  */
 export const cancelarReserva = async (reservaId: string) => {
   try {
-    const token = await AsyncStorage.getItem(TOKEN_KEY);
+    const token = await getAuthToken();
     const response = await fetch(`${API_URL}/reservas/${reservaId}/cancelar`, {
       method: 'PUT',
       headers: {

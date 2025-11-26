@@ -29,7 +29,8 @@ import {
   updateCanchaAdmin,
   deleteCanchaAdmin,
   toggleCanchaStatus,
-  CanchaAdmin
+  CanchaAdmin,
+  getPerfilComplejo
 } from '../services/admin.service';
 import { CLOUDINARY_CONFIG, CLOUDINARY_UPLOAD_URL } from '../../../config/cloudinary';
 
@@ -50,14 +51,24 @@ export const AdminCanchasScreen = () => {
   const [imagenUri, setImagenUri] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [nombreComplejo, setNombreComplejo] = useState('Mis Canchas');
   
   // Estados para el DateTimePicker
   const [showPickerFor, setShowPickerFor] = useState<'inicio' | 'fin' | null>(null);
   const [pickerTime, setPickerTime] = useState(new Date());
 
-  // Cargar canchas al montar el componente
+  // Cargar canchas y perfil del complejo al montar el componente
   useEffect(() => {
-    loadCanchas();
+    const cargarDatosIniciales = async () => {
+      // Cargar perfil del complejo
+      const perfil = await getPerfilComplejo();
+      if (perfil?.nombre) {
+        setNombreComplejo(perfil.nombre);
+      }
+      // Cargar canchas
+      loadCanchas();
+    };
+    cargarDatosIniciales();
   }, []);
 
   const loadCanchas = async () => {
@@ -412,7 +423,7 @@ return (
     {/* Encabezado */}
     <View style={styles.header}>
       <View style={styles.headerRow}>
-        <Text style={styles.headerTitle}>Mis Canchas</Text>
+        <Text style={styles.headerTitle}>{nombreComplejo}</Text>
         <TouchableOpacity style={styles.headerConfigBtn} onPress={() => {}}>
           <Ionicons name="settings-outline" size={22} color={colors.brandBlue} />
         </TouchableOpacity>

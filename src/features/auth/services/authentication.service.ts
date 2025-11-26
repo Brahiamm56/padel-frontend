@@ -1,8 +1,18 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DeviceEventEmitter } from 'react-native';
 import { API_BASE_URL, TOKEN_KEY } from '../../../config/api';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
+import { 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword,
+  GoogleAuthProvider,
+  signInWithCredential
+} from 'firebase/auth';
 import { auth } from '../../../config/firebase';
+import * as WebBrowser from 'expo-web-browser';
+import * as Google from 'expo-auth-session/providers/google';
+
+// Completar la sesión de autenticación
+WebBrowser.maybeCompleteAuthSession();
 
 // --- URL de nuestro backend ---
 const API_URL = `${API_BASE_URL}/auth`;
@@ -10,17 +20,78 @@ const USER_KEY = 'user_data';
 
 // --- Tipos de Datos ---
 export type Usuario = {
-  id: string; // Usaremos el ID de nuestro backend
-  email: string;
-  nombre?: string;
-  role: 'admin' | 'user';
+  id: string;
+  email: string;
+  nombre?: string;
+  role: 'admin' | 'user';
 };
 
-// --- FUNCIONES QUE HABLAN CON EL BACKEND ---
+// --- CONFIGURACIÓN DE GOOGLE AUTH ---
+export const useGoogleAuth = () => {
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    androidClientId: '91155734343-ees4tlh5b7j764e8ffrnkebp84n87aht.apps.googleusercontent.com',
+    iosClientId: '91155734343-mitlcugvjboe64r7f91ms9s41qomkdl3.apps.googleusercontent.com',
+    webClientId: '264292956767-09pabn7po7idvp1do7oa6a65qqsh2cbo.apps.googleusercontent.com', 
+  });
 
-/**
- * Registra un nuevo usuario llamando a nuestro backend.
- */
+  return { request, response, promptAsync };
+};
+
+// --- FUNCIÓN DE LOGIN CON GOOGLE ---
+export const loginWithGoogle = async (idToken: string) => {
+  try {
+    console.log('🔵 [Google Login] Iniciando autenticación...');
+    
+    // 1. Autenticar con Firebase
+    const credential = GoogleAuthProvider.credential(idToken);
+    const userCredential = await signInWithCredential(auth, credential);
+    const firebaseUser = userCredential.user;
+    
+    console.log('✅ [Google Login] Autenticado en Firebase:', firebaseUser.email);
+
+    // 2. Enviar datos al backend
+    console.log('🔵 [Google Login] Enviando datos al backend...');
+    const response = await fetch(`${API_URL}/google-login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: firebaseUser.email,
+        nombre: firebaseUser.displayName,
+        uid: firebaseUser.uid,
+        photoURL: firebaseUser.photoURL
+      }),
+    });
+
+    const data = await response.json();
+    console.log('🔵 [Google Login] Respuesta del backend:', data);
+    
+    if (!response.ok) {
+      throw new Error(data.message || 'Error al iniciar sesión con Google.');
+    }
+
+    // 3. Guardar token y datos del usuario
+    if (data.token && data.user) {
+      await AsyncStorage.setItem(TOKEN_KEY, data.token);
+      await AsyncStorage.setItem(USER_KEY, JSON.stringify(data.user));
+      console.log('✅ [Google Login] Token y usuario guardados');
+      
+      // Notificar al AuthContext
+      DeviceEventEmitter.emit('userLoggedIn', {
+        user: data.user,
+        token: data.token
+      });
+    }
+
+    return { success: true, data };
+  } catch (error: any) {
+    console.error('🔴 [Google Login] Error:', error);
+    return { success: false, message: error.message };
+  }
+};
+
+// --- RESTO DE TUS FUNCIONES (registerUser, loginUser, logout, etc.) ---
+// ... (mantén todo lo demás igual)
+
 export const registerUser = async (userData: any) => {
   try {
     console.log('🔵 Enviando datos de registro a:', `${API_URL}/register`);
@@ -33,7 +104,6 @@ export const registerUser = async (userData: any) => {
     
     console.log('🔵 Respuesta del servidor:', response.status, response.statusText);
     
-    // Verificar si la respuesta es JSON
     const contentType = response.headers.get('content-type');
     if (!contentType || !contentType.includes('application/json')) {
       const textResponse = await response.text();
@@ -46,13 +116,11 @@ export const registerUser = async (userData: any) => {
       throw new Error(data.message || 'Error al registrar el usuario.');
     }
 
-    // Crear usuario en Firebase después del registro exitoso en el backend
     try {
       await createUserWithEmailAndPassword(auth, userData.email, userData.password);
       console.log('✅ Usuario creado en Firebase');
     } catch (firebaseError) {
       console.error('🔴 Error al crear usuario en Firebase:', firebaseError);
-      // Continuamos aunque falle Firebase ya que tenemos el usuario en el backend
     }
 
     return { success: true, data };
@@ -62,13 +130,9 @@ export const registerUser = async (userData: any) => {
   }
 };
 
-/**
- * Inicia sesión de un usuario y guarda el token y los datos del usuario.
- */
 export const loginUser = async (credentials: any) => {
     try {
         console.log('🔵 Enviando credenciales a:', `${API_URL}/login`);
-        console.log('🔵 Credenciales:', { email: credentials.email, password: '***' });
         
         const response = await fetch(`${API_URL}/login`, {
             method: 'POST',
@@ -76,42 +140,32 @@ export const loginUser = async (credentials: any) => {
             body: JSON.stringify(credentials),
         });
         
-        console.log('🔵 Respuesta del servidor:', response.status, response.statusText);
-        
-        // Verificar si la respuesta es JSON
         const contentType = response.headers.get('content-type');
-        console.log('🔵 Content-Type:', contentType);
         
         if (!contentType || !contentType.includes('application/json')) {
-            // Si no es JSON, obtener el texto de la respuesta
             const textResponse = await response.text();
             console.error('🔴 Respuesta no es JSON:', textResponse);
             throw new Error(`El servidor devolvió: ${textResponse}`);
         }
         
         const data = await response.json();
-        console.log('🔵 Datos recibidos:', data);
         
         if (!response.ok) {
             throw new Error(data.message || 'Error al iniciar sesión.');
         }
 
-        // --- ¡Paso Clave! Guardamos los datos de la sesión ---
         if (data.token && data.user) {
-            // Primero autenticamos en Firebase
             try {
                 await signInWithEmailAndPassword(auth, credentials.email, credentials.password);
                 console.log('✅ Usuario autenticado en Firebase');
             } catch (firebaseError) {
                 console.error('🔴 Error al autenticar en Firebase:', firebaseError);
-                // Continuamos aunque falle Firebase ya que tenemos el token JWT
             }
 
             await AsyncStorage.setItem(TOKEN_KEY, data.token);
             await AsyncStorage.setItem(USER_KEY, JSON.stringify(data.user));
             console.log('✅ Token y datos de usuario guardados');
             
-            // Notificar al AuthContext que el usuario se logueó
             DeviceEventEmitter.emit('userLoggedIn', {
                 user: data.user,
                 token: data.token
@@ -125,16 +179,10 @@ export const loginUser = async (credentials: any) => {
     }
 };
 
-/**
- * Cierra la sesión del usuario eliminando el token y los datos.
- * Esta función limpia tanto el backend como el estado local.
- */
 export const logout = async (): Promise<void> => {
   try {
-    // 1. Obtener el token actual
     const token = await AsyncStorage.getItem(TOKEN_KEY);
     
-    // 2. Si hay token, notificar al backend que se cierra sesión
     if (token) {
       try {
         await fetch(`${API_URL}/logout`, {
@@ -147,16 +195,16 @@ export const logout = async (): Promise<void> => {
         console.log('Sesión cerrada en el backend exitosamente');
       } catch (backendError) {
         console.warn('No se pudo cerrar sesión en el backend:', backendError);
-        // Continuamos aunque falle el backend
       }
     }
     
-    // 3. Limpiar datos locales
+    // Cerrar sesión en Firebase
+    await auth.signOut();
+    
     await AsyncStorage.removeItem(TOKEN_KEY);
     await AsyncStorage.removeItem(USER_KEY);
     console.log('Sesión local cerrada exitosamente');
     
-    // 4. Disparar evento para notificar a los componentes que necesiten reaccionar al logout
     DeviceEventEmitter.emit('userLoggedOut');
     
   } catch (error) {
@@ -165,18 +213,10 @@ export const logout = async (): Promise<void> => {
   }
 };
 
-// --- FUNCIONES PARA GESTIONAR LA SESIÓN GUARDADA ---
-
-/**
- * Obtiene el token guardado en el dispositivo.
- */
 export const getToken = async (): Promise<string | null> => {
     return await AsyncStorage.getItem(TOKEN_KEY);
 };
 
-/**
- * Obtiene los datos del usuario guardados en el dispositivo.
- */
 export const getSavedUser = async (): Promise<Usuario | null> => {
     const userJson = await AsyncStorage.getItem(USER_KEY);
     return userJson ? JSON.parse(userJson) : null;

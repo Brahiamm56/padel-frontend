@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -19,13 +19,61 @@ import { Button, Input, Loading } from '../../../components/common';
 import { colors } from '../../../styles/colors';
 import { spacing, fontSize, fontWeight } from '../../../styles/spacing';
 import { validators, errorMessages } from '../../../utils/validators';
-import { loginUser } from '../services/authentication.service';
+import { loginUser, useGoogleAuth, loginWithGoogle } from '../services/authentication.service';
 
 export const LoginScreen = ({ navigation }: any) => {
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState({ email: '', password: '' });
+
+  // Hook de Google Auth
+  const { request, response, promptAsync } = useGoogleAuth();
+
+  // Manejar respuesta de Google
+  useEffect(() => {
+    if (response?.type === 'success') {
+      const { id_token } = response.params;
+      handleGoogleLogin(id_token);
+    } else if (response?.type === 'error') {
+      console.error('🔴 Error en Google Auth:', response.error);
+      Alert.alert('Error', 'No se pudo iniciar sesión con Google');
+      setGoogleLoading(false);
+    } else if (response?.type === 'dismiss') {
+      setGoogleLoading(false);
+    }
+  }, [response]);
+
+  // Función para manejar login con Google
+  const handleGoogleLogin = async (idToken: string) => {
+    try {
+      setGoogleLoading(true);
+      const result = await loginWithGoogle(idToken);
+      
+      if (result.success) {
+        console.log('✅ Login con Google exitoso');
+        Alert.alert('¡Bienvenido!', 'Has iniciado sesión con Google correctamente.');
+      } else {
+        Alert.alert('Error', result.message || 'Error al iniciar sesión con Google');
+      }
+    } catch (error: any) {
+      console.error('🔴 Error en handleGoogleLogin:', error);
+      Alert.alert('Error', error.message || 'Error al iniciar sesión con Google');
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
+  // Iniciar flujo de Google
+  const handleGooglePress = async () => {
+    if (!request) {
+      Alert.alert('Error', 'Google Auth no está disponible en este momento');
+      return;
+    }
+    setGoogleLoading(true);
+    await promptAsync();
+  };
 
   // Validar formulario
   const validateForm = (): boolean => {
@@ -197,13 +245,20 @@ export const LoginScreen = ({ navigation }: any) => {
 
             {/* Google Button with outline style */}
             <TouchableOpacity 
-              style={styles.googleButton}
-              onPress={() => Alert.alert('Próximamente', 'Login con Google')}
+              style={[styles.googleButton, googleLoading && styles.googleButtonDisabled]}
+              onPress={handleGooglePress}
               activeOpacity={0.8}
+              disabled={googleLoading || !request}
             >
               <View style={styles.googleButtonContent}>
-                <Text style={styles.googleIcon}>G</Text>
-                <Text style={styles.googleButtonText}>Continuar con Google</Text>
+                {googleLoading ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <>
+                    <Text style={styles.googleIcon}>G</Text>
+                    <Text style={styles.googleButtonText}>Continuar con Google</Text>
+                  </>
+                )}
               </View>
             </TouchableOpacity>
           </View>
@@ -358,6 +413,9 @@ const styles = StyleSheet.create({
     paddingVertical: isSmallDevice ? spacing.sm : spacing.md,
     paddingHorizontal: spacing.lg,
     marginBottom: isSmallDevice ? spacing.xs : spacing.sm,
+  },
+  googleButtonDisabled: {
+    opacity: 0.6,
   },
   googleButtonContent: {
     flexDirection: 'row',

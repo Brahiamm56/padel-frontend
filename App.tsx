@@ -5,7 +5,44 @@ import { AuthProvider } from './src/features/auth/contexts/AuthContext';
 import { ThemeProvider } from './src/features/auth/contexts/ThemeContext';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import * as SplashScreen from 'expo-splash-screen';
-import { View } from 'react-native';
+import { View, LogBox } from 'react-native';
+
+// Suprimir warnings molestos conocidos
+LogBox.ignoreLogs([
+  'expo-notifications: Android Push notifications',
+  '`expo-notifications` functionality is not fully supported in Expo Go',
+  'setLayoutAnimationEnabledExperimental',
+  'SafeAreaView has been deprecated',
+]);
+
+// Suprimir errores de consola específicos de expo-notifications en Expo Go
+const originalConsoleError = console.error;
+const originalConsoleWarn = console.warn;
+
+console.error = (...args) => {
+  const firstArg = args[0];
+  if (
+    typeof firstArg === 'string' &&
+    (firstArg.includes('expo-notifications') ||
+     firstArg.includes('functionality is not fully supported'))
+  ) {
+    return; // Ignorar estos errores
+  }
+  originalConsoleError(...args);
+};
+
+console.warn = (...args) => {
+  const firstArg = args[0];
+  if (
+    typeof firstArg === 'string' &&
+    (firstArg.includes('expo-notifications') ||
+     firstArg.includes('setLayoutAnimationEnabledExperimental') ||
+     firstArg.includes('SafeAreaView has been deprecated'))
+  ) {
+    return; // Ignorar estos warnings
+  }
+  originalConsoleWarn(...args);
+};
 
 // Mantener el splash screen visible mientras se carga la app
 SplashScreen.preventAutoHideAsync();

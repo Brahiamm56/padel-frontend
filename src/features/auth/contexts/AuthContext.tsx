@@ -17,6 +17,8 @@ import {
   LoginCredentials,
   RegisterCredentials,
 } from '../../../types/auth.types';
+import { registerPushToken, unregisterPushToken } from '../../../services/pushToken.service';
+import { setAuthToken, clearAuthToken } from '../../../config/api';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -79,13 +81,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         updatedAt: new Date(),
       };
       
+      // ✅ IMPORTANTE: Establecer token en memoria ANTES de actualizar estado
+      setAuthToken(data.token);
+      
       setUser(user);
       setToken(data.token);
       setLoading(false);
+      
+      // Registrar push token en el backend
+      setTimeout(() => {
+        registerPushToken().catch(() => {
+          // Error manejado silenciosamente en el servicio
+        });
+      }, 1000);
     });
 
     const logoutListener = DeviceEventEmitter.addListener('userLoggedOut', () => {
       console.log('🔴 Evento de logout recibido, limpiando estado del AuthContext');
+      clearAuthToken();
       setUser(null);
       setToken(null);
       setLoading(false);
@@ -113,6 +126,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         const savedUser = JSON.parse(savedUserJson);
         console.log('🔵 Usuario cargado desde storage:', savedUser);
         
+        // ✅ Establecer token en memoria inmediatamente
+        setAuthToken(savedToken);
+        
         // Convertir al formato del AuthContext
         const user: User = {
           uid: savedUser.id || savedUser.uid, // Usar el ID del backend
@@ -127,6 +143,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         setUser(user);
         setToken(savedToken);
         console.log('✅ Usuario cargado exitosamente en AuthContext');
+        
+        // Registrar push token si ya hay sesión
+        setTimeout(() => {
+          registerPushToken().catch(() => {
+            // Error manejado silenciosamente en el servicio
+          });
+        }, 1000);
       } else {
         console.log('🔵 No hay usuario guardado');
         setUser(null);
@@ -161,6 +184,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
           updatedAt: userData.updatedAt?.toDate() || new Date(),
         };
 
+        // ✅ Establecer token en memoria ANTES de guardar en AsyncStorage
+        setAuthToken(idToken);
+        
         // Guardar en estado y AsyncStorage
         setUser(user);
         setToken(idToken);
@@ -228,6 +254,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   // Logout
   const logout = async () => {
     try {
+      // Desregistrar push token
+      await unregisterPushToken();
+      
+      // ✅ Limpiar token de memoria
+      clearAuthToken();
+      
       await signOut(auth);
       setUser(null);
       setToken(null);

@@ -33,11 +33,13 @@ import { colors } from '../../../styles/colors';
 import { spacing, fontSize, borderRadius } from '../../../styles/spacing';
 import { format, addDays } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { useAuth } from '../../auth/contexts/AuthContext';
 
 const { width } = Dimensions.get('window');
 
 const CanchaDetalleScreen = ({ route, navigation }: any) => {
   const { complejoId, canchaId } = route.params;
+  const { user } = useAuth();
 
   const [canchaDetalle, setCanchaDetalle] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -239,7 +241,7 @@ const CanchaDetalleScreen = ({ route, navigation }: any) => {
       hora: horarioSeleccionado.horaInicio,
       duracion: duracionSeleccionada,
       horaFin: horarioSeleccionado.horaFin,
-      usuarioId: 'user-id-placeholder', // TODO: Obtener del contexto de autenticación
+      usuarioId: user?.uid || ''
     };
 
     console.log('📤 Creando reserva con estado Pendiente:', reservaData);
@@ -297,29 +299,37 @@ const CanchaDetalleScreen = ({ route, navigation }: any) => {
         )}
 
         <View style={styles.content}>
-          {/* Info de la cancha */}
-          <Text style={styles.title}>{canchaDetalle.nombre}</Text>
-          <Text style={styles.subtitle}>{canchaDetalle.complejoNombre}</Text>
-          <Text style={styles.price}>${canchaDetalle.precioHora} / hr</Text>
+          {/* Info de la cancha con características a la derecha */}
+          <View style={styles.headerContainer}>
+            <View style={styles.infoLeft}>
+              <Text style={styles.title}>{canchaDetalle.nombre}</Text>
+              <Text style={styles.subtitle}>{canchaDetalle.complejoNombre}</Text>
+              <Text style={styles.price}>${canchaDetalle.precioHora} / hr</Text>
+            </View>
+            
+            {/* Características a la derecha */}
+            {canchaDetalle.caracteristicas && canchaDetalle.caracteristicas.length > 0 && (
+              <View style={styles.featuresContainer}>
+                {canchaDetalle.caracteristicas.map((feature: string, index: number) => (
+                  <View key={index} style={styles.featureItem}>
+                    <Ionicons name="checkmark-circle" size={14} color={colors.success} />
+                    <Text style={styles.featureText}>{feature}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
 
-          {/* Características */}
-          {canchaDetalle.caracteristicas && canchaDetalle.caracteristicas.length > 0 && (
-            <View style={styles.featuresContainer}>
-              {canchaDetalle.caracteristicas.map((feature: string, index: number) => (
-                <View key={index} style={styles.featureItem}>
-                  <Ionicons name="checkmark-circle" size={16} color={colors.success} />
-                  <Text style={styles.featureText}>{feature}</Text>
-                </View>
-              ))}
+          {/* Descripción compacta */}
+          {canchaDetalle.descripcion && canchaDetalle.descripcion !== 'cgg' && (
+            <View style={styles.descripcionContainer}>
+              <Text style={styles.sectionTitle}>Descripción</Text>
+              <Text style={styles.description} numberOfLines={2}>{canchaDetalle.descripcion}</Text>
             </View>
           )}
 
-          {/* Descripción */}
-          <Text style={styles.sectionTitle}>Descripción</Text>
-          <Text style={styles.description}>{canchaDetalle.descripcion}</Text>
-
           {/* Selector de Fecha */}
-          <Text style={styles.sectionTitle}>Seleccioná una fecha</Text>
+          <Text style={styles.sectionTitleCompact}>Seleccioná una fecha</Text>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -356,36 +366,11 @@ const CanchaDetalleScreen = ({ route, navigation }: any) => {
             ))}
           </ScrollView>
 
-          {/* Selector de Duración */}
-          <View style={styles.duracionSelector}>
-            <Text style={styles.duracionTitulo}>Seleccioná duración:</Text>
-            <View style={styles.duracionChips}>
-              {[1, 1.5, 2].map((duracion) => (
-                <TouchableOpacity
-                  key={duracion}
-                  style={[
-                    styles.duracionChip,
-                    duracionSeleccionada === duracion && styles.duracionChipActivo
-                  ]}
-                  onPress={() => {
-                    setDuracionSeleccionada(duracion);
-                    setHorarioSeleccionado(null);
-                  }}
-                >
-                  <Text style={[
-                    styles.duracionChipTexto,
-                    duracionSeleccionada === duracion && styles.duracionChipTextoActivo
-                  ]}>
-                    {duracion === 1 ? '1 hora' : `${duracion} hrs`}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
+          
 
           {/* Lista de Horarios con Rangos */}
           <Text style={styles.horariosDisponiblesTitulo}>
-            Horarios Disponibles ({duracionSeleccionada}h)
+            ELEGÍ UN HORARIO
           </Text>
           
           {loading ? (
@@ -435,45 +420,13 @@ const CanchaDetalleScreen = ({ route, navigation }: any) => {
                       }}
                       disabled={!rangoDisponible}
                     >
-                      <View style={[
-                        styles.indicadorDisponibilidad,
-                        { backgroundColor: rangoDisponible ? '#4CAF50' : '#EF5350' }
-                      ]} />
-                      
                       <Text style={[
-                        styles.horarioRangoCarrusel,
-                        !rangoDisponible && styles.horarioRangoOcupado
+                        styles.horarioTextoSimple,
+                        !rangoDisponible && styles.horarioTextoOcupado,
+                        horarioSeleccionado?.horaInicio === horaInicio && styles.horarioTextoSeleccionado
                       ]}>
-                        {horaInicio}
+                        {horaInicio} a {horaFin}
                       </Text>
-                      
-                      <Text style={styles.horarioSeparador}>-</Text>
-                      
-                      <Text style={[
-                        styles.horarioRangoCarrusel,
-                        !rangoDisponible && styles.horarioRangoOcupado
-                      ]}>
-                        {horaFin}
-                      </Text>
-                      
-                      <Text style={[
-                        styles.estadoHorario,
-                        !rangoDisponible && styles.estadoHorarioOcupado
-                      ]}>
-                        {rangoDisponible ? 'Disponible' : 'Ocupado'}
-                      </Text>
-                      
-                      <View style={[
-                        styles.horarioBoton,
-                        !rangoDisponible && styles.horarioBotonOcupado
-                      ]}>
-                        <Text style={[
-                          styles.horarioBotonTexto,
-                          !rangoDisponible && styles.horarioBotonTextoOcupado
-                        ]}>
-                          {rangoDisponible ? 'Reservar' : 'Ocupado'}
-                        </Text>
-                      </View>
                     </TouchableOpacity>
                   );
                 })
@@ -531,28 +484,71 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.white },
   scrollView: { flex: 1 },
   galleryImage: { width: width, height: 250, backgroundColor: colors.background },
-  content: { padding: spacing.lg },
-  title: { fontSize: fontSize.xl, fontWeight: 'bold', color: '#001F5B', marginBottom: spacing.xs },
-  subtitle: { fontSize: fontSize.md, color: colors.textSecondary, marginBottom: spacing.sm },
-  price: { fontSize: fontSize.lg, fontWeight: 'bold', color: '#C4D600', marginBottom: spacing.lg },
-  
-  // Características
-  featuresContainer: { marginBottom: spacing.lg },
-  featureItem: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.xs },
-  featureText: { fontSize: fontSize.sm, color: '#666666', marginLeft: spacing.xs },
-  
-  // Secciones
-  sectionTitle: { 
-    fontSize: fontSize.lg, 
+  content: { padding: spacing.md },
+  headerContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: spacing.md,
+  },
+  infoLeft: {
+    flex: 1,
+    paddingRight: spacing.sm,
+  },
+  title: { 
+    fontSize: 22, 
     fontWeight: 'bold', 
     color: '#001F5B', 
-    marginTop: spacing.lg, 
-    marginBottom: spacing.md 
+    marginBottom: 4 
+  },
+  subtitle: { 
+    fontSize: fontSize.sm, 
+    color: colors.textSecondary, 
+    marginBottom: 6 
+  },
+  price: { 
+    fontSize: fontSize.lg, 
+    fontWeight: 'bold', 
+    color: '#C4D600' 
+  },
+  
+  // Características (a la derecha)
+  featuresContainer: { 
+    justifyContent: 'flex-start',
+    alignItems: 'flex-end',
+  },
+  featureItem: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    marginBottom: 4 
+  },
+  featureText: { 
+    fontSize: 12, 
+    color: '#666666', 
+    marginLeft: 4 
+  },
+  
+  // Secciones
+  descripcionContainer: {
+    marginBottom: spacing.sm,
+  },
+  sectionTitle: { 
+    fontSize: 14, 
+    fontWeight: '600', 
+    color: '#001F5B', 
+    marginBottom: 4 
+  },
+  sectionTitleCompact: {
+    fontSize: fontSize.md, 
+    fontWeight: 'bold', 
+    color: '#001F5B', 
+    marginTop: spacing.sm, 
+    marginBottom: spacing.sm 
   },
   description: { 
-    fontSize: fontSize.md, 
+    fontSize: 13, 
     color: '#666666', 
-    lineHeight: 20 
+    lineHeight: 18 
   },
   
   // Selector de Fecha
@@ -565,7 +561,7 @@ const styles = StyleSheet.create({
     marginRight: spacing.sm,
     alignItems: 'center',
     minWidth: 65,
-    minHeight: 85,
+    minHeight: 60, // Cambio aquí
     justifyContent: 'center',
   },
   selectedDateButton: { backgroundColor: '#C4D600' },
@@ -591,122 +587,50 @@ const styles = StyleSheet.create({
   },
   selectedDateText: { color: '#001F5B' },
   
-  // Selector de Duración
-  duracionSelector: {
-    marginTop: 20,
-    marginBottom: 16,
-  },
-  duracionTitulo: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#001F5B',
-    marginBottom: 12,
-  },
-  duracionChips: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  duracionChip: {
-    flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    backgroundColor: 'transparent',
-    borderWidth: 1.5,
-    borderColor: '#E0E0E0',
-    alignItems: 'center',
-  },
-  duracionChipActivo: {
-    backgroundColor: '#C4D600',
-    borderColor: '#C4D600',
-  },
-  duracionChipTexto: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#666666',
-  },
-  duracionChipTextoActivo: {
-    color: '#001F5B',
-  },
-  
   // Lista de Horarios
   horariosDisponiblesTitulo: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#001F5B',
-    marginBottom: 5,
-    marginTop: 24,
-    
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#333333',
+    marginBottom: 12,
+    marginTop: spacing.md,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   horariosCarrusel: {
-    paddingHorizontal: spacing.sm,
+    paddingHorizontal: 0,
     paddingBottom: spacing.md,
+    gap: 12,
   },
   horarioItemCarrusel: {
-    backgroundColor: '#FFFFFF',
-    padding: 16,
-    borderRadius: 12,
-    marginRight: 12,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    width: 160,
-    alignItems: 'center',
-  },
-  horarioItemOcupado: {
-    backgroundColor: '#F5F5F5',
-    opacity: 0.6,
-  },
-  horarioItemSeleccionado: {
-    borderColor: '#C4D600',
-    borderWidth: 2,
-  },
-  indicadorDisponibilidad: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    marginBottom: 8,
-  },
-  horarioRangoCarrusel: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#001F5B',
-    textAlign: 'center',
-  },
-  horarioRangoOcupado: {
-    color: '#999999',
-  },
-  horarioSeparador: {
-    fontSize: 16,
-    color: '#666666',
-    marginVertical: 4,
-  },
-  estadoHorario: {
-    fontSize: 12,
-    color: '#4CAF50',
-    marginTop: 8,
-    marginBottom: 12,
-  },
-  estadoHorarioOcupado: {
-    color: '#EF5350',
-  },
-  horarioBoton: {
-    backgroundColor: '#C4D600',
-    paddingVertical: 8,
+    backgroundColor: '#E8E8E8',
+    paddingVertical: 14,
     paddingHorizontal: 20,
     borderRadius: 8,
-    width: '100%',
+    marginRight: 12,
+    borderWidth: 0,
+    minWidth: 140,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  horarioBotonOcupado: {
-    backgroundColor: 'transparent',
+  horarioItemOcupado: {
+    backgroundColor: '#E8E8E8',
+    opacity: 0.5,
   },
-  horarioBotonTexto: {
-    fontSize: 14,
+  horarioItemSeleccionado: {
+    backgroundColor: '#C4D600',
+  },
+  horarioTextoSimple: {
+    fontSize: 15,
     fontWeight: '600',
-    color: '#001F5B',
+    color: '#333333',
+    textAlign: 'center',
   },
-  horarioBotonTextoOcupado: {
+  horarioTextoOcupado: {
     color: '#999999',
+  },
+  horarioTextoSeleccionado: {
+    color: '#001F5B',
   },
   
   // Textos de Estado
