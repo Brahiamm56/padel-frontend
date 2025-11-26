@@ -30,7 +30,7 @@ export const getAuthToken = async (): Promise<string | null> => {
   if (inMemoryToken) {
     return inMemoryToken;
   }
-  
+
   // Si no, intentar obtenerlo de AsyncStorage
   try {
     const storedToken = await AsyncStorage.getItem(TOKEN_KEY);
@@ -57,16 +57,19 @@ export const clearAuthToken = () => {
  */
 export const fetchWithAuth = async (url: string, options: RequestInit = {}): Promise<Response> => {
   const token = await getAuthToken();
-  
+
+  // Primero tomar los headers existentes
+  const existingHeaders = options.headers || {};
+
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
-    ...options.headers,
+    ...existingHeaders, // Agregar headers pasados por el caller
   };
-  
+
   if (token) {
     (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
   }
-  
+
   return fetch(url, {
     ...options,
     headers,

@@ -71,7 +71,7 @@ export const getMisCanchasAdmin = async (): Promise<CanchaAdmin[]> => {
     const token = await getAuthToken();
     console.log('🔑 Token:', token ? 'Presente' : 'NO EXISTE');
     console.log('🌐 URL:', `${API_URL}/admin/canchas`);
-    
+
     const response = await fetch(`${API_URL}/admin/canchas`, {
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -79,7 +79,7 @@ export const getMisCanchasAdmin = async (): Promise<CanchaAdmin[]> => {
     });
 
     console.log('📡 Status del response:', response.status);
-    
+
     if (!response.ok) {
       const errorText = await response.text();
       console.error('❌ Error response:', errorText);
@@ -88,7 +88,14 @@ export const getMisCanchasAdmin = async (): Promise<CanchaAdmin[]> => {
 
     const data = await response.json();
     console.log('📦 Datos recibidos:', JSON.stringify(data, null, 2));
-    return data;
+
+    // Normalizar: mapear 'publicada' a 'activa' para compatibilidad con canchas viejas
+    const canchasNormalizadas = data.map((cancha: any) => ({
+      ...cancha,
+      activa: cancha.activa !== undefined ? cancha.activa : cancha.publicada ?? true,
+    }));
+
+    return canchasNormalizadas;
   } catch (error) {
     console.error('💥 Error en getMisCanchasAdmin:', error);
     return [];
@@ -157,7 +164,7 @@ export const updateCanchaAdmin = async (canchaId: string, canchaData: Partial<Ca
 export const deleteCanchaAdmin = async (canchaId: string): Promise<void> => {
   try {
     const token = await getAuthToken();
-    
+
     const response = await fetch(`${API_URL}/admin/canchas/${canchaId}`, {
       method: 'DELETE',
       headers: {
@@ -179,14 +186,16 @@ export const deleteCanchaAdmin = async (canchaId: string): Promise<void> => {
 /**
  * Toggle del estado activa/inactiva de una cancha
  */
-export const toggleCanchaStatus = async (canchaId: string): Promise<boolean> => {
+export const toggleCanchaStatus = async (canchaId: string, activa: boolean): Promise<boolean> => {
   try {
     const token = await getAuthToken();
-    const response = await fetch(`${API_URL}/admin/canchas/${canchaId}/toggle`, {
+    const response = await fetch(`${API_URL}/admin/canchas/${canchaId}/toggle-status`, {
       method: 'PUT',
       headers: {
         'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
       },
+      body: JSON.stringify({ activa }), // ✅ Enviar activa en lugar de publicada
     });
 
     if (!response.ok) {
@@ -209,7 +218,7 @@ export const getAdminReservas = async (): Promise<ReservaAdmin[]> => {
     const token = await getAuthToken();
     console.log('🔍 [Reservas] Token:', token ? 'Presente' : 'NO EXISTE');
     console.log('🌐 [Reservas] URL:', `${API_URL}/admin/reservas`);
-    
+
     const response = await fetch(`${API_URL}/admin/reservas`, {
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -217,7 +226,7 @@ export const getAdminReservas = async (): Promise<ReservaAdmin[]> => {
     });
 
     console.log('📡 [Reservas] Status:', response.status);
-    
+
     if (!response.ok) {
       const errorText = await response.text();
       console.error('❌ [Reservas] Error del servidor:', errorText);

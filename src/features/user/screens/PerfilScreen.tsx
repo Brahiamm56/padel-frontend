@@ -17,10 +17,10 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import {
-  getCurrentUserInfo,
+  getUserProfile,
   getUserProfileSignature,
   uploadImageToCloudinary,
-  updateUserProfile,
+  updateUserProfileBackend,
   type UserInfo,
 } from '../services/user.service';
 import { logout as authLogout } from '../../../features/auth/services/authentication.service';
@@ -33,26 +33,35 @@ import { useAuth } from '../../../features/auth/contexts/AuthContext';
  */
 const PerfilScreen = () => {
   const { user: authUser, isAuthenticated, updateUser } = useAuth();
-  
+
   // Estados para datos del usuario
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
+
   // Estados para edición
   const [nombre, setNombre] = useState('');
   const [apellido, setApellido] = useState('');
   const [telefono, setTelefono] = useState('');
   const [fotoUri, setFotoUri] = useState<string | null>(null);
   const [originalFotoUrl, setOriginalFotoUrl] = useState<string | null>(null);
-  
+
   // Estados de UI
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
 
+  // Ref para evitar recargar datos inmediatamente después de guardar
+  const skipNextLoad = React.useRef(false);
+
   // Cargar datos del usuario cada vez que la pantalla obtiene foco
   useFocusEffect(
     useCallback(() => {
+      // Si acabamos de guardar, no recargar (los datos ya están actualizados)
+      if (skipNextLoad.current) {
+        console.log('⏭️ Saltando recarga de datos (acabamos de guardar)');
+        skipNextLoad.current = false;
+        return;
+      }
       loadUserData();
     }, [isAuthenticated, authUser])
   );
@@ -64,12 +73,12 @@ const PerfilScreen = () => {
       return;
     }
 
-    console.log('🔵 Cargando datos del usuario...');
+    console.log('🔵 Cargando datos del usuario desde backend...');
     try {
       setLoading(true);
-      const userData = await getCurrentUserInfo();
-      console.log('🔵 Datos del usuario cargados:', userData);
-      
+      const userData = await getUserProfile(); // ← CAMBIADO: Ahora llama al backend
+      console.log('🔵 Datos del usuario cargados desde backend:', userData);
+
       setUserInfo(userData);
       setNombre(userData.nombre || '');
       setApellido(userData.apellido || '');
@@ -89,12 +98,12 @@ const PerfilScreen = () => {
   // Detectar cambios en el formulario
   const checkForChanges = useCallback(() => {
     if (!userInfo) return false;
-    
+
     const nombreChanged = nombre !== (userInfo.nombre || '');
     const apellidoChanged = apellido !== (userInfo.apellido || '');
     const telefonoChanged = telefono !== (userInfo.telefono || '');
     const fotoChanged = fotoUri !== null;
-    
+
     return nombreChanged || apellidoChanged || telefonoChanged || fotoChanged;
   }, [nombre, apellido, telefono, fotoUri, userInfo]);
 
@@ -108,7 +117,7 @@ const PerfilScreen = () => {
     try {
       // Solicitar permisos
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      
+
       if (status !== 'granted') {
         Alert.alert(
           'Permiso requerido',
@@ -149,31 +158,58 @@ const PerfilScreen = () => {
         finalFotoUrl = await uploadImageToCloudinary(fotoUri, signature);
       }
 
-      // Preparar datos para actualizar
+      // Preparar datos para actualizar en el backend (CON fotoUrl si hay)
       const updateData = {
         nombre: nombre.trim(),
         apellido: apellido.trim(),
         telefono: telefono.trim(),
-        fotoUrl: finalFotoUrl || undefined,
+        ...(finalFotoUrl && { fotoUrl: finalFotoUrl }), // ✅ Incluir fotoUrl si existe
       };
 
-      // Actualizar perfil en el backend
-      const updatedUser = await updateUserProfile(updateData);
+      console.log('📡 Datos a enviar al backend:', updateData);
+
+      // Actualizar perfil en el backend Node.js
+      const response = await updateUserProfileBackend(updateData);
+
+      // Extraer datos del usuario de la respuesta del backend
+      // El backend devuelve: { message: "...", user: {...} }
+      const backendUser = response.user || response;
+
+      // Combinar con foto si hay una nueva
+      const finalUserData = {
+        uid: backendUser.id || backendUser.uid || userInfo?.uid,
+        email: backendUser.email || userInfo?.email || '',
+        nombre: backendUser.nombre || nombre,
+        apellido: backendUser.apellido || apellido,
+        telefono: backendUser.telefono || telefono,
+        fotoUrl: finalFotoUrl || backendUser.fotoUrl || originalFotoUrl,
+        role: backendUser.role || userInfo?.role,
+        createdAt: backendUser.createdAt,
+        updatedAt: backendUser.updatedAt,
+      };
+
+      console.log('📝 Datos finales del usuario:', finalUserData);
 
       // Actualizar contexto de autenticación si está disponible
       if (updateUser) {
         await updateUser({
-          nombre: updatedUser.nombre,
-          apellido: updatedUser.apellido,
-          telefono: updatedUser.telefono,
+          nombre: finalUserData.nombre,
+          apellido: finalUserData.apellido,
+          telefono: finalUserData.telefono,
         });
       }
 
       // Actualizar estado local
-      setUserInfo(updatedUser);
-      setOriginalFotoUrl(finalFotoUrl);
+      setUserInfo(finalUserData);
+      setNombre(finalUserData.nombre);
+      setApellido(finalUserData.apellido);
+      setTelefono(finalUserData.telefono);
+      setOriginalFotoUrl(finalUserData.fotoUrl || null);
       setFotoUri(null);
       setHasChanges(false);
+
+      // Evitar recarga automática inmediata
+      skipNextLoad.current = true;
 
       Alert.alert('Éxito', 'Tu perfil ha sido actualizado correctamente');
     } catch (error: any) {
@@ -222,9 +258,20 @@ const PerfilScreen = () => {
   if (error) {
     return (
       <SafeAreaView style={styles.errorContainer}>
+        <Ionicons name="alert-circle-outline" size={64} color={colors.error} />
         <Text style={styles.errorText}>{error}</Text>
         <TouchableOpacity style={styles.retryButton} onPress={loadUserData}>
           <Text style={styles.retryButtonText}>Reintentar</Text>
+        </TouchableOpacity>
+
+        {/* Botón de cerrar sesión en error (útil cuando el token expiró) */}
+        <TouchableOpacity
+          style={[styles.logoutButton, { marginTop: 16 }]}
+          onPress={handleLogout}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="log-out-outline" size={20} color={colors.error} />
+          <Text style={styles.logoutButtonText}>Cerrar Sesión</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
@@ -235,18 +282,18 @@ const PerfilScreen = () => {
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
       >
-        <ScrollView 
+        <ScrollView
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
           {/* Cabecera con Avatar Editable */}
           <View style={styles.header}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.avatarContainer}
               onPress={handlePickImage}
               activeOpacity={0.8}
@@ -266,7 +313,7 @@ const PerfilScreen = () => {
           {/* Formulario de Edición */}
           <View style={styles.formSection}>
             <Text style={styles.sectionTitle}>INFORMACIÓN PERSONAL</Text>
-            
+
             {/* Campo Nombre */}
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Nombre</Text>
@@ -339,8 +386,8 @@ const PerfilScreen = () => {
           </TouchableOpacity>
 
           {/* Botón de Cerrar Sesión */}
-          <TouchableOpacity 
-            style={styles.logoutButton} 
+          <TouchableOpacity
+            style={styles.logoutButton}
             onPress={handleLogout}
             activeOpacity={0.8}
           >

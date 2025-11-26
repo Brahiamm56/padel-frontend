@@ -69,7 +69,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     const loginListener = DeviceEventEmitter.addListener('userLoggedIn', (data) => {
       console.log('🔵 Evento de login recibido, actualizando estado del AuthContext');
       console.log('🔵 Datos del login:', data);
-      
+
       // Convertir los datos del backend al formato del AuthContext
       const user: User = {
         uid: data.user.id,
@@ -80,14 +80,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         createdAt: new Date(),
         updatedAt: new Date(),
       };
-      
+
       // ✅ IMPORTANTE: Establecer token en memoria ANTES de actualizar estado
       setAuthToken(data.token);
-      
+
       setUser(user);
       setToken(data.token);
       setLoading(false);
-      
+
       // Registro de push token desactivado temporalmente
     });
 
@@ -109,18 +109,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const loadUserFromStorage = async () => {
     try {
       console.log('🔵 Cargando usuario desde AsyncStorage...');
-      
+
       // Usar las mismas claves que authService
       const savedToken = await AsyncStorage.getItem('auth_token');
       const savedUserJson = await AsyncStorage.getItem('user_data');
-      
+
       console.log('🔵 Token encontrado:', !!savedToken);
       console.log('🔵 Usuario encontrado:', !!savedUserJson);
-      
+
       if (savedUserJson && savedToken) {
         const savedUser = JSON.parse(savedUserJson);
         console.log('🔵 Usuario cargado desde storage:', savedUser);
-        
+
         // Convertir al formato del AuthContext
         const user: User = {
           uid: savedUser.id || savedUser.uid, // Usar el ID del backend
@@ -131,11 +131,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
           createdAt: new Date(savedUser.createdAt) || new Date(),
           updatedAt: new Date(savedUser.updatedAt) || new Date(),
         };
-        
+
         setUser(user);
         setToken(savedToken);
         console.log('✅ Usuario cargado exitosamente en AuthContext');
-        
+
         // Registro de push token desactivado temporalmente
       } else {
         console.log('🔵 No hay usuario guardado');
@@ -206,7 +206,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const register = async (credentials: RegisterCredentials) => {
     try {
       setLoading(true);
-      
+
       // Crear usuario en Firebase Auth
       const userCredential = await createUserWithEmailAndPassword(
         auth,
@@ -241,7 +241,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       // Desregistro de push token desactivado temporalmente
       // ✅ Limpiar token de memoria
       clearAuthToken();
-      
+
       await signOut(auth);
       setUser(null);
       setToken(null);
@@ -253,15 +253,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
-  // Actualizar usuario
+  // Actualizar usuario (solo actualiza el estado local, NO Firebase)
+  // ⚠️ IMPORTANTE: NO actualizamos Firebase aquí porque el backend ya lo hace
+  // Flujo: Frontend → Backend API → Firebase (el backend actualiza Firebase)
   const updateUser = async (userData: Partial<User>) => {
     if (!user) return;
 
     try {
+      // Solo actualizar el estado local y AsyncStorage
       const updatedUser = { ...user, ...userData, updatedAt: new Date() };
-      await setDoc(doc(db, 'users', user.uid), updatedUser, { merge: true });
+
+      // ❌ REMOVIDO: await setDoc(doc(db, 'users', user.uid), updatedUser, { merge: true });
+      // El backend ya se encarga de actualizar Firebase
+
       setUser(updatedUser);
       await storage.setItem(STORAGE_KEYS.USER, updatedUser);
+
+      console.log('✅ Estado local del usuario actualizado (sin escribir a Firebase)');
     } catch (error) {
       console.error('Update user error:', error);
       throw error;

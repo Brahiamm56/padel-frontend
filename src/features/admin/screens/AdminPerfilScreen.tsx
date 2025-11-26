@@ -18,6 +18,7 @@ import { useNavigation } from '@react-navigation/native';
 import { getSavedUser, logout as authLogout, type Usuario } from '../../auth/services/authentication.service';
 import { getClubInfo, type ClubInfo } from '../../canchas/services/club.service';
 import { updateClubLogo } from '../../canchas/services/club.service';
+import { getPerfilComplejo, type PerfilComplejo } from '../services/admin.service';
 import { useTheme } from '../../../features/auth/contexts/ThemeContext';
 
 // Colores de marca definidos
@@ -80,6 +81,7 @@ const AdminPerfilScreen = () => {
   const { theme, isDarkMode, toggleTheme } = useTheme();
   const [user, setUser] = useState<Usuario | null>(null);
   const [clubInfo, setClubInfo] = useState<ClubInfo | null>(null);
+  const [perfilComplejo, setPerfilComplejo] = useState<PerfilComplejo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [imageLoading, setImageLoading] = useState(false);
@@ -87,13 +89,17 @@ const AdminPerfilScreen = () => {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [userData, clubData] = await Promise.all([
+        const [userData, clubData, perfil] = await Promise.all([
           getSavedUser(),
           getClubInfo(),
+          getPerfilComplejo(),
         ]);
-        
+
         setUser(userData);
         setClubInfo(clubData);
+        if (perfil) {
+          setPerfilComplejo(perfil);
+        }
         setError(null);
       } catch (err) {
         console.error('Error al cargar los datos:', err);
@@ -260,8 +266,8 @@ const AdminPerfilScreen = () => {
   const reservasCount = 15;  // Valor predeterminado
   const rating = 4.8;  // Valor predeterminado
 
-  // Nombre del usuario o club
-  const displayName = user?.nombre || clubInfo?.nombre || 'Brahiam Iserre';
+  // Nombre del usuario o club (prioriza el nombre del complejo del backend)
+  const displayName = perfilComplejo?.nombre || user?.nombre || clubInfo?.nombre || 'Brahiam Iserre';
   
   return (
     <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -329,6 +335,28 @@ const AdminPerfilScreen = () => {
 
       {/* Menú de Opciones Agrupadas */}
       <View style={styles.menuContainer}>
+        {/* Datos del complejo (desde /admin/perfil-complejo) */}
+        {perfilComplejo && (
+          <MenuGroup title="MI COMPLEJO">
+            <View style={styles.menuOption}>
+              <View style={styles.menuOptionContent}>
+                <Ionicons name="business-outline" size={22} color={theme.colors.primary} style={styles.menuIcon} />
+                <View>
+                  <Text style={[styles.menuOptionText, { color: theme.colors.text }]}>
+                    {perfilComplejo.nombre}
+                  </Text>
+                  {!!perfilComplejo.telefono && (
+                    <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>Teléfono: {perfilComplejo.telefono}</Text>
+                  )}
+                  {!!perfilComplejo.direccion && (
+                    <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>Dirección: {perfilComplejo.direccion}</Text>
+                  )}
+                </View>
+              </View>
+            </View>
+          </MenuGroup>
+        )}
+
         {/* Grupo MI CUENTA */}
         <MenuGroup title="MI CUENTA">
           <MenuOption 

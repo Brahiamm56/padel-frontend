@@ -1,6 +1,6 @@
 import { auth } from '../../../config/firebase';
 import { getFirestore, doc, getDoc, setDoc } from 'firebase/firestore';
-import { getAuthToken } from '../../../config/api';
+import { getAuthToken, API_BASE_URL, fetchWithAuth } from '../../../config/api';
 import { uploadImageWithProgress, generateStoragePath } from '../../../services/firebaseStorage.service';
 import { CLOUDINARY_CONFIG, CLOUDINARY_UPLOAD_URL } from '../../../config/cloudinary';
 
@@ -15,6 +15,7 @@ export type UserInfo = {
   email: string;
   telefono?: string;
   fotoUrl?: string;
+  role?: string;
   createdAt?: Date | string;
   updatedAt?: Date | string;
 };
@@ -39,7 +40,7 @@ export const getCurrentUserInfo = async (): Promise<UserInfo> => {
     }
 
     const user = auth.currentUser;
-    
+
     if (!user) {
       console.log('🔴 No hay usuario activo en Firebase');
       throw new Error('No hay usuario autenticado');
@@ -51,7 +52,7 @@ export const getCurrentUserInfo = async (): Promise<UserInfo> => {
     const db = getFirestore();
     const userDocRef = doc(db, 'users', user.uid);
     const userDoc = await getDoc(userDocRef);
-    
+
     if (!userDoc.exists()) {
       console.warn('No se encontraron datos adicionales en Firestore para el usuario:', user.uid);
       return {
@@ -64,7 +65,7 @@ export const getCurrentUserInfo = async (): Promise<UserInfo> => {
 
     const userData = userDoc.data();
     console.log('Datos del usuario desde Firestore:', userData);
-    
+
     return {
       uid: user.uid,
       email: user.email || '',
@@ -73,6 +74,92 @@ export const getCurrentUserInfo = async (): Promise<UserInfo> => {
     } as UserInfo;
   } catch (error) {
     console.error('Error en getCurrentUserInfo:', error);
+    throw error;
+  }
+};
+
+/**
+ * Obtiene el perfil del usuario desde el backend Node.js
+ * GET /api/users/profile
+ */
+export const getUserProfile = async (): Promise<UserInfo> => {
+  try {
+    console.log('📡 Llamando a GET /api/users/profile...');
+
+    // Agregar timestamp para evitar caché agresivo
+    const response = await fetchWithAuth(`${API_BASE_URL}/users/profile?t=${Date.now()}`, {
+      method: 'GET',
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error('❌ Error del backend:', errorData);
+      throw new Error(errorData.error || 'Error al obtener perfil del backend');
+    }
+
+    const data = await response.json();
+    console.log('✅ Perfil obtenido del backend (RAW):', JSON.stringify(data, null, 2));
+
+    // El backend puede devolver diferentes estructuras
+    // Intentar extraer el usuario de diferentes formas
+    const userData = data.user || data;
+    console.log('✅ Datos del usuario extraídos:', JSON.stringify(userData, null, 2));
+
+    // Mapear campos del backend al formato del frontend
+    const mappedUser: UserInfo = {
+      uid: userData.id || userData.uid,
+      email: userData.email,
+      nombre: userData.nombre || '',
+      apellido: userData.apellido || '',
+      telefono: userData.telefono || '',
+      fotoUrl: userData.fotoUrl || '',
+      role: userData.role || userData.rol,
+      createdAt: userData.createdAt,
+      updatedAt: userData.updatedAt,
+    };
+
+    console.log('✅ Usuario mapeado final:', JSON.stringify(mappedUser, null, 2));
+    return mappedUser;
+  } catch (error) {
+    console.error('🔴 Error en getUserProfile:', error);
+    throw error;
+  }
+};
+
+/**
+ * Actualiza el perfil del usuario en el backend Node.js
+ * PUT /api/users/profile
+ */
+export const updateUserProfileBackend = async (data: {
+  nombre?: string;
+  apellido?: string;
+  telefono?: string;
+  fotoUrl?: string;
+}): Promise<{ message: string; user: any }> => {
+  try {
+    console.log('📡 Llamando a PUT /api/users/profile con:', data);
+
+    const response = await fetchWithAuth(`${API_BASE_URL}/users/profile`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error('❌ Error del backend:', errorData);
+      throw new Error(errorData.error || 'Error al actualizar perfil en el backend');
+    }
+
+    const updatedData = await response.json();
+    console.log('✅ Perfil actualizado en backend:', updatedData);
+    return updatedData;
+  } catch (error) {
+    console.error('🔴 Error en updateUserProfileBackend:', error);
     throw error;
   }
 };
@@ -91,13 +178,13 @@ export const uploadImageToFirebase = async (
 ): Promise<string> => {
   try {
     console.log('📤 Subiendo imagen a Firebase Storage...');
-    
+
     // Generar path único
     const storagePath = generateStoragePath(folder);
-    
+
     // Usar el nuevo servicio que usa la API REST
     const downloadUrl = await uploadImageWithProgress(imageUri, storagePath, onProgress);
-    
+
     console.log('✅ Imagen subida a Firebase Storage:', downloadUrl);
     return downloadUrl;
   } catch (error) {
@@ -107,52 +194,30 @@ export const uploadImageToFirebase = async (
 };
 
 /**
- * Actualiza el perfil del usuario directamente en Firestore
+ * @deprecated Esta función está DEPRECADA. NO usarla.
+ * Actualiza el perfil directamente en Firestore (OBSOLETO)
+ * 
+ * ⚠️ IMPORTANTE: Esta función hace escrituras directas a Firebase Firestore,
+ * lo cual causa problemas porque el backend ya se encarga de eso.
+ * 
+ * 🔧 USAR EN SU LUGAR: updateUserProfileBackend()
+ * 
+ * El flujo correcto es:
+ * Frontend → Backend API → Firebase (el backend actualiza Firebase)
+ * 
+ * NO hacer:
+ * Frontend → Backend API → Firebase
+ *     ↓
+ * Firebase (duplicado, con datos incorrectos)
  */
 export const updateUserProfile = async (data: UpdateProfileData): Promise<UserInfo> => {
-  try {
-    const user = auth.currentUser;
-    if (!user) {
-      throw new Error('No hay usuario autenticado');
-    }
+  console.warn('⚠️ updateUserProfile está DEPRECADO. Usa updateUserProfileBackend() en su lugar.');
 
-    console.log('📤 Actualizando perfil en Firestore:', data);
-
-    const db = getFirestore();
-    const userDocRef = doc(db, 'users', user.uid);
-    
-    // Preparar datos para actualizar
-    const updateData = {
-      nombre: data.nombre,
-      apellido: data.apellido,
-      telefono: data.telefono,
-      ...(data.fotoUrl && { fotoUrl: data.fotoUrl }),
-      updatedAt: new Date(),
-    };
-
-    // Actualizar en Firestore (merge: true para no sobrescribir otros campos)
-    await setDoc(userDocRef, updateData, { merge: true });
-
-    // Obtener datos actualizados
-    const updatedDoc = await getDoc(userDocRef);
-    const updatedData = updatedDoc.data();
-
-    const updatedUser: UserInfo = {
-      uid: user.uid,
-      email: user.email || '',
-      nombre: updatedData?.nombre || data.nombre,
-      apellido: updatedData?.apellido || data.apellido,
-      telefono: updatedData?.telefono || data.telefono,
-      fotoUrl: updatedData?.fotoUrl || data.fotoUrl,
-      updatedAt: new Date(),
-    };
-
-    console.log('✅ Perfil actualizado en Firestore:', updatedUser);
-    return updatedUser;
-  } catch (error) {
-    console.error('🔴 Error en updateUserProfile:', error);
-    throw error;
-  }
+  // Lanzar error para evitar uso accidental
+  throw new Error(
+    '❌ updateUserProfile() está deprecado. ' +
+    'Usa updateUserProfileBackend() en su lugar para evitar escrituras duplicadas a Firebase.'
+  );
 };
 
 /**
